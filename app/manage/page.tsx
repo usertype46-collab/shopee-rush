@@ -40,7 +40,6 @@ export default function ManageSchedule() {
     
     alert(`正在呼叫後端使用 ${provider} 模型 (${modelCode}) 解析班表...`);
     
-    // 呼叫後端 API
     const res = await fetch('/api/parse-image', {
       method: 'POST',
       body: JSON.stringify({ imageBase64: 'mock_base64', modelName: modelCode, provider }),
@@ -118,18 +117,27 @@ export default function ManageSchedule() {
             <th className="p-2 border">班別</th>
             <th className="p-2 border">地點</th>
             <th className="p-2 border">時間</th>
-            <th className="p-2 border">操作</th>
+            <th className="p-2 border">操作 / 快捷</th>
           </tr>
         </thead>
         <tbody>
           {/* 新增列 */}
           <tr className="bg-green-50">
-            <td className="p-1 border"><input type="date" className="w-full p-1" value={newForm.date} onChange={e=>setNewForm({...newForm, date: e.target.value})} /></td>
-            <td className="p-1 border"><input type="text" placeholder="名稱" className="w-full p-1" value={newForm.name} onChange={e=>setNewForm({...newForm, name: e.target.value})} /></td>
-            <td className="p-1 border"><input type="text" placeholder="休假/班別" className="w-full p-1" value={newForm.shift} onChange={e=>setNewForm({...newForm, shift: e.target.value})} /></td>
-            <td className="p-1 border"><input type="text" placeholder="地點" className="w-full p-1" value={newForm.location} onChange={e=>setNewForm({...newForm, location: e.target.value})} /></td>
-            <td className="p-1 border"><input type="text" placeholder="時間" className="w-full p-1" value={newForm.time} onChange={e=>setNewForm({...newForm, time: e.target.value})} /></td>
-            <td className="p-1 border"><button onClick={handleAdd} className="bg-green-500 text-white px-2 py-1 rounded w-full">新增</button></td>
+            <td className="p-1 border"><input type="date" className="w-full p-1 border" value={newForm.date} onChange={e=>setNewForm({...newForm, date: e.target.value})} /></td>
+            <td className="p-1 border"><input type="text" placeholder="名稱" className="w-full p-1 border" value={newForm.name} onChange={e=>setNewForm({...newForm, name: e.target.value})} /></td>
+            <td className="p-1 border"><input type="text" placeholder="班別" className="w-full p-1 border" value={newForm.shift} onChange={e=>setNewForm({...newForm, shift: e.target.value})} /></td>
+            <td className="p-1 border"><input type="text" placeholder="地點" className="w-full p-1 border" value={newForm.location} onChange={e=>setNewForm({...newForm, location: e.target.value})} /></td>
+            <td className="p-1 border"><input type="text" placeholder="時間" className="w-full p-1 border" value={newForm.time} onChange={e=>setNewForm({...newForm, time: e.target.value})} /></td>
+            <td className="p-1 border flex gap-1">
+              <button onClick={handleAdd} className="bg-green-500 text-white px-2 py-1 rounded">新增</button>
+              <button 
+                type="button" 
+                onClick={() => setNewForm({...newForm, shift: '休假', location: '---', time: '全天休假'})}
+                className="bg-blue-500 text-white px-2 py-1 rounded text-xs"
+              >
+                帶入休假
+              </button>
+            </td>
           </tr>
           
           {/* 資料列 */}
@@ -142,9 +150,16 @@ export default function ManageSchedule() {
                   <td className="p-1 border"><input className="w-full border p-1" value={editForm.shift} onChange={e=>setEditForm({...editForm, shift: e.target.value})} /></td>
                   <td className="p-1 border"><input className="w-full border p-1" value={editForm.location} onChange={e=>setEditForm({...editForm, location: e.target.value})} /></td>
                   <td className="p-1 border"><input className="w-full border p-1" value={editForm.time} onChange={e=>setEditForm({...editForm, time: e.target.value})} /></td>
-                  <td className="p-1 border flex gap-1">
+                  <td className="p-1 border flex gap-1 flex-wrap">
                     <button onClick={() => handleSaveEdit(shift.id)} className="bg-blue-500 text-white px-2 py-1 rounded">儲存</button>
                     <button onClick={() => setEditId('')} className="bg-gray-400 text-white px-2 py-1 rounded">取消</button>
+                    <button 
+                      type="button" 
+                      onClick={() => setEditForm({...editForm, shift: '休假', location: '---', time: '全天休假'})}
+                      className="bg-blue-500 text-white px-2 py-1 rounded text-xs"
+                    >
+                      設為休假
+                    </button>
                   </td>
                 </>
               ) : (
@@ -155,8 +170,8 @@ export default function ManageSchedule() {
                   <td className="p-2 border">{shift.location}</td>
                   <td className="p-2 border">{shift.time}</td>
                   <td className="p-2 border flex gap-2">
-                    <button onClick={() => { setEditId(shift.id); setEditForm(shift); }} className="text-blue-500">修改</button>
-                    <button onClick={() => handleDelete(shift.id)} className="text-red-500">刪除</button>
+                    <button onClick={() => { setEditId(shift.id); setEditForm(shift); }} className="text-blue-500 underline">修改</button>
+                    <button onClick={() => handleDelete(shift.id)} className="text-red-500 underline">刪除</button>
                   </td>
                 </>
               )}
@@ -167,4 +182,3 @@ export default function ManageSchedule() {
     </div>
   );
 }
-
