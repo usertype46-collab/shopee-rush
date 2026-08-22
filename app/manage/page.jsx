@@ -4,19 +4,15 @@ import { db } from '@/lib/firebase';
 import { ref, onValue, push, set, update, remove } from 'firebase/database';
 
 export default function ManageSchedule() {
-  const [shifts, setShifts] = useState<any[]>([]);
-  const [names, setNames] = useState<string[]>([]);
+  const [shifts, setShifts] = useState([]);
+  const [names, setNames] = useState([]);
   const [selectedName, setSelectedName] = useState('');
   
-  // 2026 AI 模型設定
   const [provider, setProvider] = useState('GEMINI');
   const [modelCode, setModelCode] = useState('gemini-1.5-pro-vision');
   
-  // 逐筆編輯狀態
   const [editId, setEditId] = useState('');
-  const [editForm, setEditForm] = useState<any>({});
-  
-  // 新增狀態
+  const [editForm, setEditForm] = useState({});
   const [newForm, setNewForm] = useState({ date: '', name: '', shift: '', location: '', time: '' });
 
   useEffect(() => {
@@ -24,7 +20,7 @@ export default function ManageSchedule() {
     onValue(shiftsRef, (snapshot) => {
       const data = snapshot.val();
       if (data) {
-        const shiftsArray = Object.entries(data).map(([id, val]: any) => ({ id, ...val }));
+        const shiftsArray = Object.entries(data).map(([id, val]) => ({ id, ...val }));
         setShifts(shiftsArray);
         setNames(Array.from(new Set(shiftsArray.map(s => s.name))));
       } else {
@@ -34,7 +30,7 @@ export default function ManageSchedule() {
     });
   }, []);
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
     
@@ -48,9 +44,9 @@ export default function ManageSchedule() {
     
     const result = await res.json();
     if (result.success) {
-      result.data.forEach((item: any) => {
+      result.data.forEach((item) => {
         const newRef = push(ref(db, 'shifts'));
-        set(newRef, { date: item.date, name: item.name, shift: item.shift, location: item.location, time: item.time });
+        set(newRef, item);
       });
       alert('圖片解析成功並匯入資料庫！');
     }
@@ -63,12 +59,12 @@ export default function ManageSchedule() {
     setNewForm({ date: '', name: '', shift: '', location: '', time: '' });
   };
 
-  const handleSaveEdit = (id: string) => {
+  const handleSaveEdit = (id) => {
     update(ref(db, `shifts/${id}`), editForm);
     setEditId('');
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = (id) => {
     if (confirm('確定刪除此筆資料？')) remove(ref(db, `shifts/${id}`));
   };
 
@@ -82,7 +78,6 @@ export default function ManageSchedule() {
     <div>
       <h1 className="text-2xl font-bold mb-4 border-l-4 border-orange-500 pl-2">資料庫管理</h1>
       
-      {/* 模型與解析區 */}
       <div className="bg-gray-100 p-4 rounded mb-6 border">
         <h2 className="font-bold mb-2">上傳班表圖 (支援 2026 AI 轉換)</h2>
         <div className="flex gap-2 mb-2">
@@ -121,7 +116,6 @@ export default function ManageSchedule() {
           </tr>
         </thead>
         <tbody>
-          {/* 新增列 */}
           <tr className="bg-green-50">
             <td className="p-1 border"><input type="date" className="w-full p-1 border" value={newForm.date} onChange={e=>setNewForm({...newForm, date: e.target.value})} /></td>
             <td className="p-1 border"><input type="text" placeholder="名稱" className="w-full p-1 border" value={newForm.name} onChange={e=>setNewForm({...newForm, name: e.target.value})} /></td>
@@ -140,16 +134,15 @@ export default function ManageSchedule() {
             </td>
           </tr>
           
-          {/* 資料列 */}
           {filteredShifts.map((shift) => (
             <tr key={shift.id}>
               {editId === shift.id ? (
                 <>
-                  <td className="p-1 border"><input className="w-full border p-1" value={editForm.date} onChange={e=>setEditForm({...editForm, date: e.target.value})} /></td>
-                  <td className="p-1 border"><input className="w-full border p-1" value={editForm.name} onChange={e=>setEditForm({...editForm, name: e.target.value})} /></td>
-                  <td className="p-1 border"><input className="w-full border p-1" value={editForm.shift} onChange={e=>setEditForm({...editForm, shift: e.target.value})} /></td>
-                  <td className="p-1 border"><input className="w-full border p-1" value={editForm.location} onChange={e=>setEditForm({...editForm, location: e.target.value})} /></td>
-                  <td className="p-1 border"><input className="w-full border p-1" value={editForm.time} onChange={e=>setEditForm({...editForm, time: e.target.value})} /></td>
+                  <td className="p-1 border"><input className="w-full border p-1" value={editForm.date || ''} onChange={e=>setEditForm({...editForm, date: e.target.value})} /></td>
+                  <td className="p-1 border"><input className="w-full border p-1" value={editForm.name || ''} onChange={e=>setEditForm({...editForm, name: e.target.value})} /></td>
+                  <td className="p-1 border"><input className="w-full border p-1" value={editForm.shift || ''} onChange={e=>setEditForm({...editForm, shift: e.target.value})} /></td>
+                  <td className="p-1 border"><input className="w-full border p-1" value={editForm.location || ''} onChange={e=>setEditForm({...editForm, location: e.target.value})} /></td>
+                  <td className="p-1 border"><input className="w-full border p-1" value={editForm.time || ''} onChange={e=>setEditForm({...editForm, time: e.target.value})} /></td>
                   <td className="p-1 border flex gap-1 flex-wrap">
                     <button onClick={() => handleSaveEdit(shift.id)} className="bg-blue-500 text-white px-2 py-1 rounded">儲存</button>
                     <button onClick={() => setEditId('')} className="bg-gray-400 text-white px-2 py-1 rounded">取消</button>
