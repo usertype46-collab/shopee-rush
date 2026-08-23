@@ -1,19 +1,15 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useState, useEffect } from 'react';
 import { db } from '@/lib/firebase';
-import { ref, onValue, push, set, update, remove } from 'firebase/database';
+import { ref, onValue, push, remove } from 'firebase/database';
 
-export default function ManageSchedule() {
+export default function Manage() {
   const [shifts, setShifts] = useState([]);
-  const [names, setNames] = useState([]);
-  const [selectedName, setSelectedName] = useState('');
-  
-  const [provider, setProvider] = useState('GEMINI');
-  const [modelCode, setModelCode] = useState('gemini-1.5-pro-vision');
-  
-  const [editId, setEditId] = useState('');
-  const [editForm, setEditForm] = useState({});
-  const [newForm, setNewForm] = useState({ date: '', name: '', shift: '', location: '', time: '' });
+  const [date, setDate] = useState('');
+  const [name, setName] = useState('');
+  const [shift, setShift] = useState('');
+  const [location, setLocation] = useState('');
+  const [time, setTime] = useState('');
 
   useEffect(() => {
     const shiftsRef = ref(db, 'shifts');
@@ -21,157 +17,99 @@ export default function ManageSchedule() {
       const data = snapshot.val();
       if (data) {
         const shiftsArray = Object.entries(data).map(([id, val]) => ({ id, ...val }));
+        shiftsArray.sort((a, b) => new Date(b.date) - new Date(a.date));
         setShifts(shiftsArray);
-        setNames(Array.from(new Set(shiftsArray.map(s => s.name))));
       } else {
         setShifts([]);
-        setNames([]);
       }
     });
   }, []);
 
-  const handleImageUpload = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    
-    alert(`正在呼叫後端使用 ${provider} 模型 (${modelCode}) 解析班表...`);
-    
-    const res = await fetch('/api/parse-image', {
-      method: 'POST',
-      body: JSON.stringify({ imageBase64: 'mock_base64', modelName: modelCode, provider }),
-      headers: { 'Content-Type': 'application/json' }
-    });
-    
-    const result = await res.json();
-    if (result.success) {
-      result.data.forEach((item) => {
-        const newRef = push(ref(db, 'shifts'));
-        set(newRef, item);
-      });
-      alert('圖片解析成功並匯入資料庫！');
+  const handleAdd = async (e) => {
+    e.preventDefault();
+    if (!date || !name) return alert('請至少填寫日期與名稱');
+    await push(ref(db, 'shifts'), { date, name, shift, location, time });
+    setDate(''); setName(''); setShift(''); setLocation(''); setTime('');
+  };
+
+  const handleDeleteAll = async () => {
+    if (confirm('確定要清除所有資料嗎？這無法復原喔！')) {
+      await remove(ref(db, 'shifts'));
     }
   };
 
-  const handleAdd = () => {
-    if (!newForm.date || !newForm.name) return alert('日期與名稱必填');
-    const newRef = push(ref(db, 'shifts'));
-    set(newRef, newForm);
-    setNewForm({ date: '', name: '', shift: '', location: '', time: '' });
+  const handleDelete = async (id) => {
+    if (confirm('確定刪除此筆資料？')) {
+      await remove(ref(db, `shifts/${id}`));
+    }
   };
-
-  const handleSaveEdit = (id) => {
-    update(ref(db, `shifts/${id}`), editForm);
-    setEditId('');
-  };
-
-  const handleDelete = (id) => {
-    if (confirm('確定刪除此筆資料？')) remove(ref(db, `shifts/${id}`));
-  };
-
-  const handleClearAll = () => {
-    if (confirm('警告：確定清除資料庫「所有資料」？此動作無法復原！')) remove(ref(db, 'shifts'));
-  };
-
-  const filteredShifts = selectedName ? shifts.filter(s => s.name === selectedName) : shifts;
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-4 border-l-4 border-orange-500 pl-2">資料庫管理</h1>
-      
-      <div className="bg-gray-100 p-4 rounded mb-6 border">
-        <h2 className="font-bold mb-2">上傳班表圖 (支援 2026 AI 轉換)</h2>
-        <div className="flex gap-2 mb-2">
-          <select className="p-2 border" value={provider} onChange={e => setProvider(e.target.value)}>
-            <option value="GEMINI">Gemini 模型</option>
-            <option value="NVIDIA">NVIDIA 雲端</option>
+      <h1 className="page-title">資料庫管理</h1>
+
+      {/* AI 上傳區塊美化 */}
+      <div className="filter-bar">
+        <h2 style={{ fontSize: '1.2rem', marginBottom: '15px', color: '#d84315', fontWeight: '900' }}>
+          ✨ 上傳班表圖 (支援 AI 自動轉換)
+        </h2>
+        <div className="flex-row" style={{ marginBottom: '15px' }}>
+          <select className="form-control" style={{ width: 'auto' }}>
+            <option value="gemini">Gemini 模型</option>
+            <option value="openai">OpenAI 模型</option>
           </select>
-          <input 
-            type="text" 
-            className="p-2 border flex-grow" 
-            placeholder="自訂模型代碼" 
-            value={modelCode} 
-            onChange={e => setModelCode(e.target.value)} 
-          />
+          <input type="text" className="form-control" defaultValue="gemini-1.5-pro-vision" style={{ flex: 1, minWidth: '200px' }} />
         </div>
-        <input type="file" accept="image/*" onChange={handleImageUpload} className="p-2 border bg-white" />
+        <div className="flex-row">
+          <input type="file" className="form-control" style={{ flex: 1, background: '#fff' }} />
+          <button className="btn" onClick={() => alert('請在此接回您的上傳解析邏輯')}>開始解析圖片</button>
+        </div>
       </div>
 
-      <div className="flex justify-between items-center mb-2">
-        <select className="p-2 border rounded" value={selectedName} onChange={e => setSelectedName(e.target.value)}>
-          <option value="">-- 查看所有人 --</option>
-          {names.map(name => <option key={name} value={name}>{name}</option>)}
-        </select>
-        <button onClick={handleClearAll} className="bg-red-500 text-white px-4 py-2 rounded">清除所有資料</button>
+      {/* 手動新增與清除工具列 */}
+      <div className="flex-row" style={{ justifyContent: 'space-between', marginBottom: '15px', marginTop: '30px' }}>
+        <h2 style={{ fontSize: '1.2rem', color: '#333', fontWeight: '900', borderLeft: '4px solid #ff5722', paddingLeft: '10px' }}>手動新增排班</h2>
+        <button className="btn-danger" onClick={handleDeleteAll} style={{ borderRadius: '8px' }}>🗑️ 清除所有資料</button>
       </div>
 
-      <table className="w-full text-left border-collapse border">
-        <thead>
-          <tr className="bg-orange-100">
-            <th className="p-2 border">日期</th>
-            <th className="p-2 border">名稱</th>
-            <th className="p-2 border">班別</th>
-            <th className="p-2 border">地點</th>
-            <th className="p-2 border">時間</th>
-            <th className="p-2 border">操作 / 快捷</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr className="bg-green-50">
-            <td className="p-1 border"><input type="date" className="w-full p-1 border" value={newForm.date} onChange={e=>setNewForm({...newForm, date: e.target.value})} /></td>
-            <td className="p-1 border"><input type="text" placeholder="名稱" className="w-full p-1 border" value={newForm.name} onChange={e=>setNewForm({...newForm, name: e.target.value})} /></td>
-            <td className="p-1 border"><input type="text" placeholder="班別" className="w-full p-1 border" value={newForm.shift} onChange={e=>setNewForm({...newForm, shift: e.target.value})} /></td>
-            <td className="p-1 border"><input type="text" placeholder="地點" className="w-full p-1 border" value={newForm.location} onChange={e=>setNewForm({...newForm, location: e.target.value})} /></td>
-            <td className="p-1 border"><input type="text" placeholder="時間" className="w-full p-1 border" value={newForm.time} onChange={e=>setNewForm({...newForm, time: e.target.value})} /></td>
-            <td className="p-1 border flex gap-1">
-              <button onClick={handleAdd} className="bg-green-500 text-white px-2 py-1 rounded">新增</button>
-              <button 
-                type="button" 
-                onClick={() => setNewForm({...newForm, shift: '休假', location: '---', time: '全天休假'})}
-                className="bg-blue-500 text-white px-2 py-1 rounded text-xs"
-              >
-                帶入休假
-              </button>
-            </td>
-          </tr>
-          
-          {filteredShifts.map((shift) => (
-            <tr key={shift.id}>
-              {editId === shift.id ? (
-                <>
-                  <td className="p-1 border"><input className="w-full border p-1" value={editForm.date || ''} onChange={e=>setEditForm({...editForm, date: e.target.value})} /></td>
-                  <td className="p-1 border"><input className="w-full border p-1" value={editForm.name || ''} onChange={e=>setEditForm({...editForm, name: e.target.value})} /></td>
-                  <td className="p-1 border"><input className="w-full border p-1" value={editForm.shift || ''} onChange={e=>setEditForm({...editForm, shift: e.target.value})} /></td>
-                  <td className="p-1 border"><input className="w-full border p-1" value={editForm.location || ''} onChange={e=>setEditForm({...editForm, location: e.target.value})} /></td>
-                  <td className="p-1 border"><input className="w-full border p-1" value={editForm.time || ''} onChange={e=>setEditForm({...editForm, time: e.target.value})} /></td>
-                  <td className="p-1 border flex gap-1 flex-wrap">
-                    <button onClick={() => handleSaveEdit(shift.id)} className="bg-blue-500 text-white px-2 py-1 rounded">儲存</button>
-                    <button onClick={() => setEditId('')} className="bg-gray-400 text-white px-2 py-1 rounded">取消</button>
-                    <button 
-                      type="button" 
-                      onClick={() => setEditForm({...editForm, shift: '休假', location: '---', time: '全天休假'})}
-                      className="bg-blue-500 text-white px-2 py-1 rounded text-xs"
-                    >
-                      設為休假
-                    </button>
-                  </td>
-                </>
-              ) : (
-                <>
-                  <td className="p-2 border">{shift.date}</td>
-                  <td className="p-2 border">{shift.name}</td>
-                  <td className="p-2 border">{shift.shift}</td>
-                  <td className="p-2 border">{shift.location}</td>
-                  <td className="p-2 border">{shift.time}</td>
-                  <td className="p-2 border flex gap-2">
-                    <button onClick={() => { setEditId(shift.id); setEditForm(shift); }} className="text-blue-500 underline">修改</button>
-                    <button onClick={() => handleDelete(shift.id)} className="text-red-500 underline">刪除</button>
-                  </td>
-                </>
-              )}
+      <form onSubmit={handleAdd} className="flex-row filter-bar" style={{ background: '#fff', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
+        <input type="date" className="form-control" value={date} onChange={e => setDate(e.target.value)} style={{ flex: 1, minWidth: '130px' }} />
+        <input type="text" className="form-control" placeholder="名稱" value={name} onChange={e => setName(e.target.value)} style={{ flex: 1, minWidth: '90px' }} />
+        <input type="text" className="form-control" placeholder="班別" value={shift} onChange={e => setShift(e.target.value)} style={{ flex: 1, minWidth: '80px' }} />
+        <input type="text" className="form-control" placeholder="地點" value={location} onChange={e => setLocation(e.target.value)} style={{ flex: 1, minWidth: '80px' }} />
+        <input type="text" className="form-control" placeholder="時間" value={time} onChange={e => setTime(e.target.value)} style={{ flex: 1, minWidth: '100px' }} />
+        <button type="submit" className="btn" style={{ minWidth: '100px' }}>+ 新增</button>
+      </form>
+
+      {/* 資料表格 */}
+      <div style={{ overflowX: 'auto', marginTop: '20px' }}>
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>日期</th>
+              <th>名稱</th>
+              <th>班別</th>
+              <th>地點</th>
+              <th>時間</th>
+              <th>操作</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {shifts.map((s) => (
+              <tr key={s.id}>
+                <td style={{ color: '#777' }}>{s.date}</td>
+                <td style={{ fontWeight: '900', color: '#ff5722' }}>{s.name}</td>
+                <td>{s.shift}</td>
+                <td>{s.location}</td>
+                <td>{s.time}</td>
+                <td>
+                  <button onClick={() => handleDelete(s.id)} className="btn-danger" style={{ padding: '6px 12px', borderRadius: '8px' }}>刪除</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
