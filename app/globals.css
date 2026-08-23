@@ -1,38 +1,144 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap');
 
-@layer base {
-  /* ================= 
-     全域按鈕美化 
-  ================= */
-  button {
-    @apply px-5 py-2.5 bg-orange-500 text-white font-semibold rounded-xl shadow-sm hover:bg-orange-600 hover:shadow-md transition-all active:scale-95 disabled:bg-gray-300 disabled:cursor-not-allowed text-sm sm:text-base;
-  }
+:root {
+  --primary: #ff5722;
+  --primary-hover: #e64a19;
+  --bg-color: #f4f7f6;
+  --card-bg: #ffffff;
+  --text-main: #333333;
+  --text-muted: #777777;
+  --border-color: #eeeeee;
+}
 
-  /* ================= 
-     全域輸入框與選單美化 
-  ================= */
-  input[type="text"], input[type="file"], select {
-    @apply px-4 py-2.5 bg-gray-50 border border-gray-200 text-gray-700 rounded-xl focus:outline-none focus:ring-4 focus:ring-orange-500/20 focus:border-orange-500 transition-all text-sm sm:text-base cursor-pointer;
-  }
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
 
-  /* ================= 
-     全域表格美化 (圓角卡片風)
-  ================= */
-  table {
-    @apply w-full text-left border-collapse rounded-2xl overflow-hidden shadow-sm border border-gray-100 mt-4;
-  }
-  thead {
-    @apply bg-orange-50 text-orange-800;
-  }
-  th {
-    @apply p-4 font-bold border-b border-orange-100 whitespace-nowrap tracking-wide;
-  }
-  td {
-    @apply p-4 border-b border-gray-100 text-gray-700 align-middle;
-  }
-  tbody tr {
-    @apply bg-white hover:bg-orange-50/50 transition-colors;
-  }
+body {
+  font-family: 'Noto Sans TC', sans-serif;
+  background-color: var(--bg-color);
+  color: var(--text-main);
+  line-height: 1.6;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+/* ================== 導覽列 (玻璃透視) ================== */
+.header {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  border-bottom: 1px solid rgba(255, 87, 34, 0.1);
+}
+.header-container {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 15px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 15px;
+}
+.logo-title {
+  font-size: 1.6rem;
+  font-weight: 900;
+  color: var(--primary);
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  letter-spacing: 0.5px;
+}
+.nav-links {
+  display: flex;
+  gap: 8px;
+  background: #fdf2ef;
+  padding: 6px;
+  border-radius: 30px;
+  border: 1px solid #ffebe6;
+}
+.nav-links a {
+  text-decoration: none;
+  color: #a25844;
+  font-weight: 700;
+  padding: 8px 18px;
+  border-radius: 20px;
+  font-size: 0.95rem;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.nav-links a:hover {
+  background: white;
+  color: var(--primary);
+  box-shadow: 0 4px 10px rgba(255, 87, 34, 0.15);
+  transform: translateY(-1px);
+}
+
+/* ================== 卡片底座 ================== */
+.main-container {
+  max-width: 1000px;
+  width: 100%;
+  margin: 30px auto;
+  padding: 0 20px;
+  flex-grow: 1;
+}
+.card {
+  background: var(--card-bg);
+  border-radius: 24px;
+  padding: 40px 30px;
+  box-shadow: 0 20px 40px rgba(255, 87, 34, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+}
+
+/* ================== 標題與表格 ================== */
+.page-title {
+  font-size: 1.8rem;
+  font-weight: 900;
+  margin-bottom: 25px;
+  border-left: 6px solid var(--primary);
+  padding-left: 15px;
+  color: var(--text-main);
+}
+.data-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  margin-top: 10px;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+  box-shadow: 0 4px 15px rgba(0,0,0,0.02);
+}
+.data-table th {
+  background: #fff3e0;
+  color: #d84315;
+  padding: 16px;
+  text-align: left;
+  font-weight: 900;
+  letter-spacing: 1px;
+}
+.data-table td {
+  padding: 16px;
+  border-bottom: 1px solid var(--border-color);
+  font-weight: 500;
+}
+.data-table tr:last-child td {
+  border-bottom: none;
+}
+.data-table tbody tr:hover {
+  background: #fffaf7;
+}
+.footer {
+  text-align: center;
+  padding: 30px;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  font-weight: 500;
 }
