@@ -10,7 +10,6 @@ export default function WeeklySchedule() {
   const [weekRange, setWeekRange] = useState({ start: '', end: '' });
 
   useEffect(() => {
-    // 計算本週的星期日(start)與星期六(end)
     const today = new Date();
     const first = today.getDate() - today.getDay(); 
     const last = first + 6; 
@@ -35,9 +34,7 @@ export default function WeeklySchedule() {
       if (data) {
         const shiftsArray = Object.entries(data).map(([id, val]) => ({ id, ...val }));
         
-        // 過濾出本週的排班
         const thisWeekShifts = shiftsArray.filter(shift => shift.date >= startStr && shift.date <= endStr);
-        // 依照日期排序
         thisWeekShifts.sort((a, b) => new Date(a.date) - new Date(b.date));
         
         setShifts(thisWeekShifts);
