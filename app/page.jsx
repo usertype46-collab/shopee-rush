@@ -29,32 +29,34 @@ export default function TodaySchedule() {
   }, []);
 
   return (
-    <div className="p-4">
-      <h1 className="text-2xl font-bold mb-4 border-l-4 border-orange-500 pl-2">今日班表 ({todayDate})</h1>
+    <div>
+      <h1 className="page-title">今日班表 ({todayDate})</h1>
       
       {todayShifts.length === 0 ? (
-        <p className="text-gray-500">今日目前無排班資料。</p>
+        <p style={{ color: '#888', marginTop: '20px' }}>今日目前無排班資料，快去好好休息吧！☕</p>
       ) : (
-        <table className="w-full text-left border-collapse border mt-4">
-          <thead>
-            <tr className="bg-orange-100">
-              <th className="p-2 border">名稱</th>
-              <th className="p-2 border">班別</th>
-              <th className="p-2 border">地點</th>
-              <th className="p-2 border">時間</th>
-            </tr>
-          </thead>
-          <tbody>
-            {todayShifts.map((shift) => (
-              <tr key={shift.id} className="bg-white hover:bg-orange-50">
-                <td className="p-2 border font-bold">{shift.name}</td>
-                <td className="p-2 border">{shift.shift}</td>
-                <td className="p-2 border">{shift.location}</td>
-                <td className="p-2 border">{shift.time}</td>
+        <div style={{ overflowX: 'auto' }}>
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>名稱</th>
+                <th>班別</th>
+                <th>地點</th>
+                <th>時間</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {todayShifts.map((shift) => (
+                <tr key={shift.id}>
+                  <td style={{ fontWeight: '900', color: '#ff5722' }}>{shift.name}</td>
+                  <td>{shift.shift}</td>
+                  <td>{shift.location}</td>
+                  <td>{shift.time}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );
