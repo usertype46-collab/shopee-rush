@@ -8,7 +8,6 @@ export default function TodaySchedule() {
   const [todayDate, setTodayDate] = useState('');
 
   useEffect(() => {
-    // 取得今天的日期並格式化為 YYYY-MM-DD
     const today = new Date();
     const year = today.getFullYear();
     const month = String(today.getMonth() + 1).padStart(2, '0');
