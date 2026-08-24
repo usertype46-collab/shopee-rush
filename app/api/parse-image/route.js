@@ -5,7 +5,8 @@ import { NextResponse } from 'next/server';
 // ==============================================================================
 const SYSTEM_PROMPT = `
 你是一個極度精準且嚴謹的班表圖像 OCR 與結構化解析 AI 助手。
-請仔細辨識圖片中排班表矩陣，輸出嚴格的 JSON 格式，禁止輸出任何 Markdown 標記或說明文字。
+請仔細辨識圖片中排班表矩陣，輸出嚴格的 JSON 格式。
+【重要規範】：請直接輸出純 JSON 物件，絕對不要加上任何 markdown 程式碼區塊標記（如 \`\`\`json 甚至是 \`\`\`），也不要在 JSON 前後夾雜任何說明文字。
 
 【絕對鐵律 - 矩陣強制對齊，徹底消滅錯位與漏抓】：
 1. **動態日期識別**：請精確讀取圖片頂部標題列的 7 個實際日期（例如 8月24日、8月25日...），存入 dates 陣列。必須剛好是 7 個日期。
@@ -21,7 +22,7 @@ const SYSTEM_PROMPT = `
 6. 【單字/雙字判讀】：如「休」，填入 "休"；如「指休」，填入 "指休"。
 7. 【多字含時間】：如「中洲/光春 1830~2230」，請完整提取字串。特別注意字型差異。
 
-強制輸出的 JSON 結構範例 (必須包含 dates 與 records 兩個 key)：
+強制輸出的 JSON 結構範例 (必須包含 dates 與 records 兩個 key，且不要有任何多餘文字)：
 {
   "dates": ["8月24日", "8月25日", "8月26日", "8月27日", "8月28日", "8月29日", "8月30日"],
   "records": [
@@ -83,7 +84,7 @@ export async function POST(req) {
       responseText = resultJson.candidates?.[0]?.content?.parts?.[0]?.text;
     } 
     // ==========================================
-    // 🚀 2. 支援 Nvidia NIM 視覺模型 API (OpenAI 相容格式)
+    // 🚀 2. 支援 Nvidia NIM 視覺模型 API
     // ==========================================
     else if (provider === 'nvidia') {
       const targetModel = modelName || 'nvidia/llama-3.2-90b-vision-instruct';
@@ -106,7 +107,7 @@ export async function POST(req) {
               ]
             }
           ],
-          max_tokens: 2048,
+          max_tokens: 4096,
           temperature: 0.1
         })
       });
@@ -125,14 +126,35 @@ export async function POST(req) {
       throw new Error('AI 未能回傳有效的解析內容');
     }
 
-    // 清除 Markdown 標記並解析 JSON
-    const cleanJsonStr = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+    // ==========================================
+    // 🛡️ 強固的 JSON 擷取與清洗機制
+    // ==========================================
     let parsedJson;
     try {
-      parsedJson = JSON.parse(cleanJsonStr);
-    } catch (e) {
-      console.error('JSON 解析原始字串失敗:', responseText);
-      throw new Error('AI 回傳格式異常，無法解析為 JSON');
+      // 1. 嘗試直接解析
+      parsedJson = JSON.parse(responseText.trim());
+    } catch (e1) {
+      try {
+        // 2. 移除 markdown 區塊標記後再試
+        const cleaned = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+        parsedJson = JSON.parse(cleaned);
+      } catch (e2) {
+        // 3. 自動尋找第一個 '{' 與最後一個 '}' 之間的安全區段
+        const firstOpen = responseText.indexOf('{');
+        const lastClose = responseText.lastIndexOf('}');
+        if (firstOpen !== -1 && lastClose !== -1 && lastClose > firstOpen) {
+          const jsonSubstring = responseText.substring(firstOpen, lastClose + 1);
+          try {
+            parsedJson = JSON.parse(jsonSubstring);
+          } catch (e3) {
+            console.error('AI 原始回傳內容:', responseText);
+            throw new Error('無法從 AI 回傳內容中萃取有效 JSON');
+          }
+        } else {
+          console.error('AI 原始回傳內容:', responseText);
+          throw new Error('AI 回傳格式異常，找不到合法的 JSON 結構');
+        }
+      }
     }
 
     // ==========================================
@@ -144,37 +166,39 @@ export async function POST(req) {
 
     if (parsedJson && parsedJson.dates && parsedJson.records) {
       parsedJson.records.forEach(record => {
-        record.statuses.forEach((status, index) => {
-          if (status && status !== "無排班" && status !== "") {
-            
-            let location = status;
-            let time = "";
-            const spaceIndex = status.lastIndexOf(" ");
-            
-            if (spaceIndex !== -1 && /\d/.test(status.substring(spaceIndex))) {
-              location = status.substring(0, spaceIndex).trim();
-              time = status.substring(spaceIndex + 1).trim();
-            }
+        if (record.statuses && Array.isArray(record.statuses)) {
+          record.statuses.forEach((status, index) => {
+            if (status && status !== "無排班" && status !== "") {
+              
+              let location = status;
+              let time = "";
+              const spaceIndex = status.lastIndexOf(" ");
+              
+              if (spaceIndex !== -1 && /\d/.test(status.substring(spaceIndex))) {
+                location = status.substring(0, spaceIndex).trim();
+                time = status.substring(spaceIndex + 1).trim();
+              }
 
-            const dateStr = parsedJson.dates[index] || '';
-            const match = dateStr.match(/(\d+)月(\d+)日/);
-            let formattedDate = dateStr;
-            if (match) {
-               const m = match[1].padStart(2, '0');
-               const d = match[2].padStart(2, '0');
-               formattedDate = `${currentYear}-${m}-${d}`;
-            }
+              const dateStr = parsedJson.dates[index] || '';
+              const match = dateStr.match(/(\d+)月(\d+)日/);
+              let formattedDate = dateStr;
+              if (match) {
+                 const m = match[1].padStart(2, '0');
+                 const d = match[2].padStart(2, '0');
+                 formattedDate = `${currentYear}-${m}-${d}`;
+              }
 
-            flatData.push({
-              id: `tmp_ai_${Date.now()}_${idCounter++}`,
-              date: formattedDate,
-              name: record.name,
-              shift: record.shift || '未知',
-              location: location,
-              time: time
-            });
-          }
-        });
+              flatData.push({
+                id: `tmp_ai_${Date.now()}_${idCounter++}`,
+                date: formattedDate,
+                name: record.name,
+                shift: record.shift || '未知',
+                location: location,
+                time: time
+              });
+            }
+          });
+        }
       });
     }
 
