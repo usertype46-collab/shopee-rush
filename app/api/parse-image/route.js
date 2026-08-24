@@ -47,18 +47,17 @@ export async function POST(req) {
 
     let activeKey = provider === 'gemini' ? geminiKey : nvidiaKey;
     if (!activeKey) {
-      return NextResponse.json({ success: false, error: `伺服器未設定 ${provider.toUpperCase()} API 金鑰` }, { status: 500 });
+      return NextResponse.json({ success: false, error: `伺服器未設定 ${provider ? provider.toUpperCase() : 'AI'} API 金鑰` }, { status: 500 });
     }
 
-    let parsedJson = null;
+    let responseText = '';
 
     // ==========================================
-    // 🚀 使用原生 Fetch 呼叫 Gemini REST API (零依賴)
+    // 🚀 1. 支援 Gemini 官方 API (原生 Fetch)
     // ==========================================
     if (provider === 'gemini') {
       const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
       const targetModel = modelName || 'gemini-1.5-pro';
-      
       const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${activeKey}`;
       
       const apiResponse = await fetch(endpoint, {
@@ -69,12 +68,7 @@ export async function POST(req) {
             {
               parts: [
                 { text: SYSTEM_PROMPT },
-                {
-                  inline_data: {
-                    mime_type: 'image/jpeg',
-                    data: base64Data
-                  }
-                }
+                { inline_data: { mime_type: 'image/jpeg', data: base64Data } }
               ]
             }
           ]
@@ -82,22 +76,63 @@ export async function POST(req) {
       });
 
       const resultJson = await apiResponse.json();
-      
       if (!apiResponse.ok) {
         throw new Error(resultJson.error?.message || 'Gemini API 呼叫失敗');
       }
 
-      const responseText = resultJson.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (!responseText) {
-        throw new Error('AI 未能回傳有效的解析內容');
+      responseText = resultJson.candidates?.[0]?.content?.parts?.[0]?.text;
+    } 
+    // ==========================================
+    // 🚀 2. 支援 Nvidia NIM 視覺模型 API (OpenAI 相容格式)
+    // ==========================================
+    else if (provider === 'nvidia') {
+      const targetModel = modelName || 'nvidia/llama-3.2-90b-vision-instruct';
+      const endpoint = 'https://integrate.api.nvidia.com/v1/chat/completions';
+
+      const apiResponse = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${activeKey}`
+        },
+        body: JSON.stringify({
+          model: targetModel,
+          messages: [
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: SYSTEM_PROMPT },
+                { type: 'image_url', image_url: { url: imageBase64 } }
+              ]
+            }
+          ],
+          max_tokens: 2048,
+          temperature: 0.1
+        })
+      });
+
+      const resultJson = await apiResponse.json();
+      if (!apiResponse.ok) {
+        throw new Error(resultJson.error?.message || 'Nvidia NIM API 呼叫失敗');
       }
 
-      // 清除 Markdown 標記
-      const cleanJsonStr = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+      responseText = resultJson.choices?.[0]?.message?.content;
+    } else {
+      throw new Error('未知的 AI 服務供應商');
+    }
+
+    if (!responseText) {
+      throw new Error('AI 未能回傳有效的解析內容');
+    }
+
+    // 清除 Markdown 標記並解析 JSON
+    const cleanJsonStr = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+    let parsedJson;
+    try {
       parsedJson = JSON.parse(cleanJsonStr);
-    } 
-    else if (provider === 'nvidia') {
-      throw new Error("Nvidia 串接目前未啟用，請使用 Gemini 模型進行辨識。");
+    } catch (e) {
+      console.error('JSON 解析原始字串失敗:', responseText);
+      throw new Error('AI 回傳格式異常，無法解析為 JSON');
     }
 
     // ==========================================
@@ -121,7 +156,7 @@ export async function POST(req) {
               time = status.substring(spaceIndex + 1).trim();
             }
 
-            const dateStr = parsedJson.dates[index];
+            const dateStr = parsedJson.dates[index] || '';
             const match = dateStr.match(/(\d+)月(\d+)日/);
             let formattedDate = dateStr;
             if (match) {
@@ -152,7 +187,7 @@ export async function POST(req) {
   } catch (error) {
     console.error('AI 解析詳細錯誤:', error);
     return NextResponse.json(
-      { success: false, error: error.message || 'AI 辨識失敗或 JSON 格式錯誤' },
+      { success: false, error: error.message || 'AI 辨識失敗或伺服器錯誤' },
       { status: 500 }
     );
   }
