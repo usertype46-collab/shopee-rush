@@ -10,16 +10,16 @@ export default function Manage() {
 
   // ================= 2. AI 解析與暫存狀態 =================
   const [provider, setProvider] = useState('gemini');
-  const [modelName, setModelName] = useState('gemini-1.5-pro-vision');
+  const [modelName, setModelName] = useState('gemini-1.5-pro');
   const [imageFile, setImageFile] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
-  const [stagedData, setStagedData] = useState([]); // 暫存區 (人工編輯用)
+  const [stagedData, setStagedData] = useState([]); // 暫存區
 
-  // 🌟 [智能聯動] 自動辨識品牌並切換對應模型 (可手動覆寫)
+  // 🌟 [智能聯動] 自動辨識品牌並切換對應模型
   useEffect(() => {
-    if (provider === 'gemini') setModelName('gemini-1.5-pro-vision');
+    if (provider === 'gemini') setModelName('gemini-1.5-pro');
     if (provider === 'nvidia') setModelName('nvidia/llama-3.2-90b-vision-instruct');
-    setSysLog({ type: 'info', text: `🔄 引擎切換至 ${provider.toUpperCase()}，預設模型代碼已自動掛載。` });
+    setSysLog({ type: 'info', text: `🔄 已自動載入 ${provider.toUpperCase()} 預設模型：${modelName === 'gemini-1.5-pro' || modelName === 'nvidia/llama-3.2-90b-vision-instruct' ? '預設代碼' : '自訂代碼'}。` });
   }, [provider]);
 
   // ================= 3. Firebase 資料讀取 =================
@@ -45,7 +45,7 @@ export default function Manage() {
     }
     
     setIsUploading(true);
-    setSysLog({ type: 'info', text: `🧠 正在連接 ${provider.toUpperCase()} AI 引擎，讀取圖像中...` });
+    setSysLog({ type: 'info', text: `🧠 正在連接 ${provider.toUpperCase()} AI 引擎 (${modelName})，執行矩陣對齊與 OCR 辨識中...` });
 
     try {
       const reader = new FileReader();
@@ -71,12 +71,12 @@ export default function Manage() {
         setIsUploading(false);
       };
     } catch (error) {
-      setSysLog({ type: 'error', text: '❌ 發生嚴重錯誤：無法連線至解析伺服器。' });
+      setSysLog({ type: 'error', text: '❌ 發生嚴重錯誤：無法連線至解析伺服器或回應超時。' });
       setIsUploading(false);
     }
   };
 
-  // ================= 5. 暫存區資料操作 (人工校對) =================
+  // ================= 5. 暫存區資料操作 =================
   const handleStagedChange = (index, field, value) => {
     const newData = [...stagedData];
     newData[index][field] = value;
@@ -91,12 +91,11 @@ export default function Manage() {
 
   const confirmAndSaveStaged = async () => {
     if (stagedData.length === 0) return;
-    setSysLog({ type: 'info', text: '💾 正在將校對後的資料寫入資料庫...' });
+    setSysLog({ type: 'info', text: '💾 正在寫入 Firebase 資料庫...' });
     
-    // 檢查完整性
     const isIncomplete = stagedData.some(s => !s.date || !s.name);
     if (isIncomplete) {
-      setSysLog({ type: 'error', text: '⚠️ 寫入失敗：部分資料缺少「日期」或「名稱」，請補齊後再試。' });
+      setSysLog({ type: 'error', text: '⚠️ 寫入失敗：部分資料缺少「日期」或「名稱」，請補齊。' });
       return;
     }
 
@@ -106,10 +105,10 @@ export default function Manage() {
           date: item.date, name: item.name, shift: item.shift, location: item.location, time: item.time
         });
       }
-      setStagedData([]); // 清空暫存區
-      setSysLog({ type: 'success', text: `🎉 成功！已將 ${stagedData.length} 筆資料完美寫入 Firebase 資料庫。` });
+      setStagedData([]);
+      setSysLog({ type: 'success', text: `🎉 成功！已將 ${stagedData.length} 筆資料安全寫入資料庫。` });
     } catch (err) {
-      setSysLog({ type: 'error', text: `❌ 寫入資料庫失敗：${err.message}` });
+      setSysLog({ type: 'error', text: `❌ 寫入失敗：${err.message}` });
     }
   };
 
@@ -125,25 +124,24 @@ export default function Manage() {
   };
 
   const handleDeleteAll = async () => {
-    if (confirm('🚨 確定清除所有排班資料？')) {
+    if (confirm('🚨 確定清除所有資料？')) {
       await remove(ref(db, 'shifts'));
       setSysLog({ type: 'info', text: '🗑️ 所有排班資料已清除。' });
     }
   };
 
   const handleDelete = async (id, name) => {
-    if (confirm('確定刪除此筆排班資料？')) {
+    if (confirm('確定刪除此筆排班？')) {
       await remove(ref(db, `shifts/${id}`));
       setSysLog({ type: 'info', text: `🗑️ 已刪除 ${name} 的排班。` });
     }
   };
 
-  // ================= 7. 渲染 UI =================
   return (
     <div>
-      <h1 className="page-title">資料庫與 AI 智能管理中心</h1>
+      <h1 className="page-title">智能排班中心與 AI 引擎</h1>
 
-      {/* 🚀 區塊 1: 系統訊息窗 (Console Log) */}
+      {/* 🚀 區塊 1: 伺服器狀態訊息窗 */}
       <div style={{ 
         backgroundColor: sysLog.type === 'error' ? '#fdecea' : sysLog.type === 'success' ? '#e8f5e9' : '#e3f2fd',
         borderLeft: `6px solid ${sysLog.type === 'error' ? '#f44336' : sysLog.type === 'success' ? '#4caf50' : '#2196f3'}`,
@@ -153,10 +151,10 @@ export default function Manage() {
         {sysLog.text}
       </div>
 
-      {/* 🚀 區塊 2: AI 上傳與參數設定 */}
+      {/* 🚀 區塊 2: AI 上傳與動態模型配置 */}
       <div className="filter-bar">
         <h2 style={{ fontSize: '1.2rem', color: '#d84315', fontWeight: '900', marginBottom: '15px' }}>
-          ✨ AI 班表圖片解析
+          ✨ AI 班表圖片解析 (支援矩陣對齊與防漏機制)
         </h2>
         
         <div className="flex-row" style={{ marginBottom: '15px' }}>
@@ -166,18 +164,32 @@ export default function Manage() {
             onChange={(e) => setProvider(e.target.value)}
             style={{ width: 'auto', fontWeight: 'bold', color: '#ff5722' }}
           >
-            <option value="gemini">Google Gemini 引擎</option>
-            <option value="nvidia">Nvidia NIM 引擎</option>
+            <option value="gemini">Google Gemini</option>
+            <option value="nvidia">Nvidia NIM</option>
           </select>
+          
           <input 
             type="text" 
             className="form-control" 
             value={modelName} 
             onChange={(e) => setModelName(e.target.value)}
-            style={{ flex: 1, minWidth: '200px', backgroundColor: '#fff', fontFamily: 'monospace', color: '#555' }} 
+            style={{ flex: 1, minWidth: '200px', backgroundColor: '#fff', fontFamily: 'monospace', color: '#555', border: '1px solid #ffccbc' }} 
             placeholder="AI 辨識模型代碼"
           />
+          
+          {/* 模型代碼快捷新增按鈕 */}
+          <button 
+            className="btn" 
+            style={{ background: '#795548', padding: '8px 16px', fontSize: '0.85rem' }}
+            onClick={() => {
+              const newModel = prompt('請輸入自訂的 AI 模型代碼 (例如 gemini-2.0-pro)：');
+              if(newModel) { setModelName(newModel); setSysLog({ type: 'success', text: `✅ 已套用自訂模型：${newModel}` }); }
+            }}
+          >
+            ✏️ 自訂模型
+          </button>
         </div>
+
         <div className="flex-row">
           <input 
             type="file" 
@@ -190,42 +202,39 @@ export default function Manage() {
             className="btn" 
             onClick={handleParseImage} 
             disabled={isUploading}
-            style={{ background: isUploading ? '#ccc' : 'var(--primary)', minWidth: '130px' }}
+            style={{ background: isUploading ? '#ccc' : 'var(--primary)', minWidth: '150px' }}
           >
-            {isUploading ? '解析中...' : '🚀 開始解析'}
+            {isUploading ? '🧠 矩陣解析中...' : '🚀 開始精準解析'}
           </button>
         </div>
       </div>
 
-      {/* 🚀 區塊 3: 暫存校對區 (當 AI 有結果時才會顯示) */}
+      {/* 🚀 區塊 3: 暫存校對區 (人工防呆防漏) */}
       {stagedData.length > 0 && (
         <div style={{ background: '#fff9c4', padding: '20px', borderRadius: '16px', marginBottom: '30px', border: '2px dashed #fbc02d' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', flexWrap: 'wrap', gap: '10px' }}>
             <h2 style={{ fontSize: '1.2rem', color: '#f57f17', fontWeight: '900' }}>
-              🔍 解析結果校對區 (尚未寫入)
+              🔍 解析結果校對區 (共 {stagedData.length} 筆)
             </h2>
             <button className="btn" onClick={confirmAndSaveStaged} style={{ background: '#4caf50' }}>
-              💾 確認無誤，寫入資料庫
+              💾 確認無誤，全部寫入
             </button>
           </div>
-          <p style={{ fontSize: '0.85rem', color: '#795548', marginBottom: '10px', fontWeight: 'bold' }}>
-            系統提示：您可以直接點擊下方表格內的文字進行修改。若該筆資料錯誤，可點擊最右側移除。
-          </p>
           <div style={{ overflowX: 'auto' }}>
             <table className="data-table" style={{ background: '#fff' }}>
               <thead>
                 <tr>
-                  <th>日期 (必填)</th><th>名稱 (必填)</th><th>班別</th><th>地點</th><th>時間</th><th>操作</th>
+                  <th>日期(必填)</th><th>名稱(必填)</th><th>班別</th><th>地點</th><th>時間</th><th>操作</th>
                 </tr>
               </thead>
               <tbody>
                 {stagedData.map((item, index) => (
                   <tr key={index}>
-                    <td><input type="date" className="form-control" value={item.date || ''} onChange={(e) => handleStagedChange(index, 'date', e.target.value)} style={{ padding: '6px', fontSize: '0.9rem' }}/></td>
-                    <td><input type="text" className="form-control" value={item.name || ''} onChange={(e) => handleStagedChange(index, 'name', e.target.value)} style={{ padding: '6px', fontSize: '0.9rem', width: '80px' }}/></td>
-                    <td><input type="text" className="form-control" value={item.shift || ''} onChange={(e) => handleStagedChange(index, 'shift', e.target.value)} style={{ padding: '6px', fontSize: '0.9rem', width: '80px' }}/></td>
-                    <td><input type="text" className="form-control" value={item.location || ''} onChange={(e) => handleStagedChange(index, 'location', e.target.value)} style={{ padding: '6px', fontSize: '0.9rem', width: '90px' }}/></td>
-                    <td><input type="text" className="form-control" value={item.time || ''} onChange={(e) => handleStagedChange(index, 'time', e.target.value)} style={{ padding: '6px', fontSize: '0.9rem', width: '100px' }}/></td>
+                    <td><input type="date" className="form-control" value={item.date || ''} onChange={(e) => handleStagedChange(index, 'date', e.target.value)} style={{ padding: '6px' }}/></td>
+                    <td><input type="text" className="form-control" value={item.name || ''} onChange={(e) => handleStagedChange(index, 'name', e.target.value)} style={{ padding: '6px', width: '80px' }}/></td>
+                    <td><input type="text" className="form-control" value={item.shift || ''} onChange={(e) => handleStagedChange(index, 'shift', e.target.value)} style={{ padding: '6px', width: '80px' }}/></td>
+                    <td><input type="text" className="form-control" value={item.location || ''} onChange={(e) => handleStagedChange(index, 'location', e.target.value)} style={{ padding: '6px', width: '100px' }}/></td>
+                    <td><input type="text" className="form-control" value={item.time || ''} onChange={(e) => handleStagedChange(index, 'time', e.target.value)} style={{ padding: '6px', width: '110px' }}/></td>
                     <td style={{ textAlign: 'center' }}>
                       <button onClick={() => removeStagedRow(index)} className="btn-danger" style={{ padding: '6px 10px', borderRadius: '8px' }}>移除</button>
                     </td>
@@ -237,29 +246,25 @@ export default function Manage() {
         </div>
       )}
 
-      {/* 🚀 區塊 4: 手動新增與資料庫檢視 */}
+      {/* 🚀 區塊 4: 手動新增與正式資料庫 */}
       <div className="flex-row" style={{ justifyContent: 'space-between', marginBottom: '15px', marginTop: '10px' }}>
-        <h2 style={{ fontSize: '1.2rem', color: '#333', fontWeight: '900', borderLeft: '4px solid #ff5722', paddingLeft: '10px' }}>正式資料庫管理</h2>
-        <button className="btn-danger" onClick={handleDeleteAll} style={{ borderRadius: '8px', fontWeight: 'bold' }}>
-          🗑️ 清除所有資料
-        </button>
+        <h2 style={{ fontSize: '1.2rem', color: '#333', fontWeight: '900', borderLeft: '4px solid #ff5722', paddingLeft: '10px' }}>正式資料庫</h2>
+        <button className="btn-danger" onClick={handleDeleteAll} style={{ borderRadius: '8px', fontWeight: 'bold' }}>🗑️ 清除所有</button>
       </div>
 
       <form onSubmit={handleManualAdd} className="flex-row filter-bar" style={{ background: '#fff', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
         <input type="date" className="form-control" value={manual.date} onChange={e => setManual({...manual, date: e.target.value})} style={{ flex: 1, minWidth: '130px' }} required />
-        <input type="text" className="form-control" placeholder="名稱(必填)" value={manual.name} onChange={e => setManual({...manual, name: e.target.value})} style={{ flex: 1, minWidth: '90px' }} required />
+        <input type="text" className="form-control" placeholder="名稱" value={manual.name} onChange={e => setManual({...manual, name: e.target.value})} style={{ flex: 1, minWidth: '90px' }} required />
         <input type="text" className="form-control" placeholder="班別" value={manual.shift} onChange={e => setManual({...manual, shift: e.target.value})} style={{ flex: 1, minWidth: '80px' }} />
         <input type="text" className="form-control" placeholder="地點" value={manual.location} onChange={e => setManual({...manual, location: e.target.value})} style={{ flex: 1, minWidth: '80px' }} />
         <input type="text" className="form-control" placeholder="時間" value={manual.time} onChange={e => setManual({...manual, time: e.target.value})} style={{ flex: 1, minWidth: '100px' }} />
-        <button type="submit" className="btn" style={{ minWidth: '100px' }}>+ 手動新增</button>
+        <button type="submit" className="btn" style={{ minWidth: '100px' }}>+ 新增</button>
       </form>
 
       <div style={{ overflowX: 'auto', marginTop: '20px' }}>
         <table className="data-table">
           <thead>
-            <tr>
-              <th>日期</th><th>名稱</th><th>班別</th><th>地點</th><th>時間</th><th style={{ textAlign: 'center' }}>操作</th>
-            </tr>
+            <tr><th>日期</th><th>名稱</th><th>班別</th><th>地點</th><th>時間</th><th style={{ textAlign: 'center' }}>操作</th></tr>
           </thead>
           <tbody>
             {shifts.length === 0 ? (
@@ -272,9 +277,7 @@ export default function Manage() {
                   <td>{s.shift}</td>
                   <td>{s.location}</td>
                   <td>{s.time}</td>
-                  <td style={{ textAlign: 'center' }}>
-                    <button onClick={() => handleDelete(s.id, s.name)} className="btn-danger" style={{ padding: '6px 14px', borderRadius: '8px' }}>刪除</button>
-                  </td>
+                  <td style={{ textAlign: 'center' }}><button onClick={() => handleDelete(s.id, s.name)} className="btn-danger" style={{ padding: '6px 14px', borderRadius: '8px' }}>刪除</button></td>
                 </tr>
               ))
             )}
