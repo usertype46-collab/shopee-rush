@@ -5,12 +5,11 @@ export async function POST(req) {
     const { imageBase64, provider, modelName } = await req.json();
 
     if (!imageBase64) {
-      return NextResponse.json({ error: '找不到圖片資料' }, { status: 400 });
+      return NextResponse.json({ success: false, error: '未接收到圖片，請確認是否已選擇檔案。' }, { status: 400 });
     }
 
     // ==========================================
-    // 🧠 核心功能：金鑰自動辨識讀取 (.env)
-    // 這裡會依照前端傳來的品牌，自動抓取系統環境變數中對應的 API KEY
+    // 🧠 核心功能：金鑰辨識與讀取 (.env)
     // ==========================================
     const geminiKey = process.env.GEMINI_API_KEY;
     const nvidiaKey = process.env.NVIDIA_API_KEY;
@@ -20,28 +19,34 @@ export async function POST(req) {
     if (provider === 'nvidia') activeKey = nvidiaKey;
 
     if (!activeKey) {
-      return NextResponse.json({ 
-        error: `伺服器環境變數 (.env) 尚未設定 ${provider.toUpperCase()} 引擎的 API 金鑰` 
-      }, { status: 500 });
+      console.warn(`[系統提示] 尚未設定 ${provider.toUpperCase()} API 金鑰。`);
     }
 
-    console.log(`[Shopee Rush AI] 啟動成功！品牌：${provider} | 模型：${modelName} | 金鑰已自動掛載`);
+    // ==========================================
+    // 模擬 AI 處理時間 (1.5秒)
+    // ==========================================
+    await new Promise(resolve => setTimeout(resolve, 1500));
 
     // ==========================================
-    // ▼ 未來您可以在此處實作 fetch 呼叫 AI 的實際邏輯 ▼
-    // 取得 AI 回傳的 JSON 後，可以直接將結構整理好回傳給前端
+    // 📊 模擬 AI 解析出來的陣列 (請在此替換為真實 AI 解析邏輯)
+    // 為了讓您測試前端的「手動編輯」功能，我們預設回傳兩筆範例
     // ==========================================
+    const parsedData = [
+      { id: 'tmp_1', date: '2026-08-25', name: '陳建邦', shift: '早班', location: '屏東竹田店', time: '08:00-16:00' },
+      { id: 'tmp_2', date: '2026-08-25', name: '林毅傑', shift: '晚班', location: '屏東竹田店', time: '16:00-24:00' },
+      { id: 'tmp_3', date: '2026-08-26', name: '王紫齡', shift: '未知', location: '屏東竹田店', time: '需確認' } // 故意留錯讓人工修改
+    ];
 
     return NextResponse.json({
       success: true,
-      message: `已成功使用 ${modelName} 進行預備解析通道`,
-      data: [] // 未來把解析出來的排班陣列放在這裡
+      message: `✅ AI 解析完成！(品牌: ${provider.toUpperCase()} | 模型: ${modelName})`,
+      data: parsedData
     });
 
   } catch (error) {
-    console.error('API 解析錯誤:', error);
+    console.error('API 錯誤:', error);
     return NextResponse.json(
-      { error: '伺服器內部錯誤，請檢查主控台日誌。' },
+      { success: false, error: `伺服器處理失敗：${error.message}` },
       { status: 500 }
     );
   }
