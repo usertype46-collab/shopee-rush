@@ -4,241 +4,283 @@ import { db } from '@/lib/firebase';
 import { ref, onValue, push, remove } from 'firebase/database';
 
 export default function Manage() {
+  // ================= 1. 系統狀態 =================
   const [shifts, setShifts] = useState([]);
-  const [date, setDate] = useState('');
-  const [name, setName] = useState('');
-  const [shift, setShift] = useState('');
-  const [location, setLocation] = useState('');
-  const [time, setTime] = useState('');
+  const [sysLog, setSysLog] = useState({ type: 'info', text: '系統準備就緒，等待指令...' });
 
-  // AI 相關狀態
+  // ================= 2. AI 解析與暫存狀態 =================
   const [provider, setProvider] = useState('gemini');
   const [modelName, setModelName] = useState('gemini-1.5-pro-vision');
   const [imageFile, setImageFile] = useState(null);
-  
-  // 新增：解析狀態與暫存編輯區
-  const [parseLog, setParseLog] = useState({ status: 'idle', msg: '' });
-  const [stagedData, setStagedData] = useState([]);
+  const [isUploading, setIsUploading] = useState(false);
+  const [stagedData, setStagedData] = useState([]); // 暫存區 (人工編輯用)
 
-  // 自動辨識與切換模型代碼
+  // 🌟 [智能聯動] 自動辨識品牌並切換對應模型 (可手動覆寫)
   useEffect(() => {
     if (provider === 'gemini') setModelName('gemini-1.5-pro-vision');
-    else if (provider === 'nvidia') setModelName('nvidia/llama-3.2-90b-vision-instruct');
+    if (provider === 'nvidia') setModelName('nvidia/llama-3.2-90b-vision-instruct');
+    setSysLog({ type: 'info', text: `🔄 引擎切換至 ${provider.toUpperCase()}，預設模型代碼已自動掛載。` });
   }, [provider]);
 
+  // ================= 3. Firebase 資料讀取 =================
   useEffect(() => {
     const shiftsRef = ref(db, 'shifts');
     onValue(shiftsRef, (snapshot) => {
       const data = snapshot.val();
       if (data) {
-        const shiftsArray = Object.entries(data).map(([id, val]) => ({ id這是一個非常實用的系統需求。因為我不確定你實際使用的後端語言（Python、C# 或 Node.js）以及 OCR 辨識模型，我為你撰寫了一套**單一檔案即可執行的網頁前端（HTML/CSS/JavaScript）完整代碼**。
+        const shiftsArray = Object.entries(data).map(([id, val]) => ({ id, ...val }));
+        shiftsArray.sort((a, b) => new Date(b.date) - new Date(a.date));
+        setShifts(shiftsArray);
+      } else {
+        setShifts([]);
+      }
+    });
+  }, []);
 
-這份代碼能讓你在瀏覽器中直接點開測試所有你要求的 UI 功能與邏輯，後續你只需將其與你的後端 API（如 OpenCV、Tesseract 或 OpenAI Vision）串接即可。
+  // ================= 4. 圖片解析呼叫 =================
+  const handleParseImage = async () => {
+    if (!imageFile) {
+      setSysLog({ type: 'error', text: '❌ 錯誤：請先選擇要解析的班表圖片。' });
+      return;
+    }
+    
+    setIsUploading(true);
+    setSysLog({ type: 'info', text: `🧠 正在連接 ${provider.toUpperCase()} AI 引擎，讀取圖像中...` });
 
-### 系統功能實作說明
-
-*   **模型代碼輸入與自動辨識**：提供專用的文字輸入區，並具備簡單的正則表達式（Regex）邏輯來判斷你輸入的是 Python、JSON 或一般文本。
-*   **手動編輯班表**：解析後的班表會以 HTML5 的 `contenteditable` 表格呈現，點擊任何儲存格即可像 Excel 一樣直接修改。
-*   **完整性檢查**：自動掃描表格，若有空白（漏辨識）的欄位會以紅色高亮標示，並阻擋後續送出。
-*   **詳細訊息框**：以模擬終端機（Console）風格呈現的文字方塊，無論是解析成功、失敗、或是系統錯誤，都會附帶時間戳記輸出於此。
-
----
-
-### 完整代碼 (HTML/JS)
-
-請將以下程式碼複製並另存為 `index.html`，然後使用任何瀏覽器（Chrome, Edge 等）開啟即可使用：
-
-```html
-<!DOCTYPE html>
-<html lang="zh-TW">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>班表解析與模型代碼測試系統</title>
-    <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 20px; background-color: #f9f9f9; }
-        .container { max-width: 900px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        h2 { border-bottom: 2px solid #0078D7; padding-bottom: 10px; color: #333; }
-        .section { margin-bottom: 20px; }
-        textarea { width: 100%; height: 100px; padding: 10px; box-sizing: border-box; font-family: monospace; }
-        button { padding: 8px 16px; background-color: #0078D7; color: white; border: none; border-radius: 4px; cursor: pointer; margin-top: 5px; }
-        button:hover { background-color: #005A9E; }
+    try {
+      const reader = new FileReader();
+      reader.readAsDataURL(imageFile);
+      reader.onload = async () => {
+        const base64 = reader.result;
         
-        /* 班表表格樣式 */
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-        th, td { border: 1px solid #ccc; padding: 10px; text-align: center; }
-        th { background-color: #eee; }
-        td[contenteditable="true"] { background-color: #fffaf0; cursor: text; transition: background 0.3s; }
-        td[contenteditable="true"]:hover { background-color: #fff0d4; }
-        td.error { background-color: #ffcccc !important; border: 2px solid red; }
+        const res = await fetch('/api/parse-image', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ imageBase64: base64, provider, modelName })
+        });
         
-        /* 訊息框樣式 */
-        .log-box { width: 100%; height: 150px; background-color: #1e1e1e; color: #4af626; font-family: monospace; padding: 10px; overflow-y: auto; box-sizing: border-box; border-radius: 4px; margin-top: 5px; }
-    </style>
-</head>
-<body>
+        const result = await res.json();
+        
+        if (result.success) {
+          setStagedData(result.data);
+          setSysLog({ type: 'success', text: result.message + ' 👉 請在下方校對資料後點擊「確認寫入」。' });
+          setImageFile(null); // 清空選擇檔案
+        } else {
+          setSysLog({ type: 'error', text: `❌ 錯誤：${result.error}` });
+        }
+        setIsUploading(false);
+      };
+    } catch (error) {
+      setSysLog({ type: 'error', text: '❌ 發生嚴重錯誤：無法連線至解析伺服器。' });
+      setIsUploading(false);
+    }
+  };
 
-<div class="container">
-    <h2>🤖 模型代碼與班表解析系統</h2>
+  // ================= 5. 暫存區資料操作 (人工校對) =================
+  const handleStagedChange = (index, field, value) => {
+    const newData = [...stagedData];
+    newData[index][field] = value;
+    setStagedData(newData);
+  };
 
-    <!-- 1. 模型代碼輸入區 -->
-    <div class="section">
-        <h3>1. 模型代碼輸入</h3>
-        <textarea id="modelCode" placeholder="請貼上你的模型參數、JSON 設定或 Python 代碼..."></textarea>
-        <button onclick="autoRecognizeCode()">自動辨識代碼格式</button>
-        <span id="codeTypeBadge" style="margin-left: 10px; font-weight: bold; color: #0078D7;"></span>
-    </div>
+  const removeStagedRow = (index) => {
+    const newData = [...stagedData];
+    newData.splice(index, 1);
+    setStagedData(newData);
+  };
 
-    <!-- 2. 圖片上傳與解析 -->
-    <div class="section">
-        <h3>2. 班表圖片上傳</h3>
-        <input type="file" id="imageInput" accept="image/*">
-        <button onclick="parseImage()">執行編譯與解析</button>
-    </div>
+  const confirmAndSaveStaged = async () => {
+    if (stagedData.length === 0) return;
+    setSysLog({ type: 'info', text: '💾 正在將校對後的資料寫入資料庫...' });
+    
+    // 檢查完整性
+    const isIncomplete = stagedData.some(s => !s.date || !s.name);
+    if (isIncomplete) {
+      setSysLog({ type: 'error', text: '⚠️ 寫入失敗：部分資料缺少「日期」或「名稱」，請補齊後再試。' });
+      return;
+    }
 
-    <!-- 3. 解析結果與手動編輯區 -->
-    <div class="section">
-        <h3>3. 解析結果 (點擊儲存格可直接修改)</h3>
-        <table id="scheduleTable">
-            <thead>
+    try {
+      for (const item of stagedData) {
+        await push(ref(db, 'shifts'), {
+          date: item.date, name: item.name, shift: item.shift, location: item.location, time: item.time
+        });
+      }
+      setStagedData([]); // 清空暫存區
+      setSysLog({ type: 'success', text: `🎉 成功！已將 ${stagedData.length} 筆資料完美寫入 Firebase 資料庫。` });
+    } catch (err) {
+      setSysLog({ type: 'error', text: `❌ 寫入資料庫失敗：${err.message}` });
+    }
+  };
+
+  // ================= 6. 手動新增與一般刪除 =================
+  const [manual, setManual] = useState({ date: '', name: '', shift: '', location: '', time: '' });
+  
+  const handleManualAdd = async (e) => {
+    e.preventDefault();
+    if (!manual.date || !manual.name) return alert('請至少填寫日期與名稱');
+    await push(ref(db, 'shifts'), manual);
+    setManual({ date: '', name: '', shift: '', location: '', time: '' });
+    setSysLog({ type: 'success', text: `✅ 手動新增成功：${manual.name} 的排班。` });
+  };
+
+  const handleDeleteAll = async () => {
+    if (confirm('🚨 確定清除所有排班資料？')) {
+      await remove(ref(db, 'shifts'));
+      setSysLog({ type: 'info', text: '🗑️ 所有排班資料已清除。' });
+    }
+  };
+
+  const handleDelete = async (id, name) => {
+    if (confirm('確定刪除此筆排班資料？')) {
+      await remove(ref(db, `shifts/${id}`));
+      setSysLog({ type: 'info', text: `🗑️ 已刪除 ${name} 的排班。` });
+    }
+  };
+
+  // ================= 7. 渲染 UI =================
+  return (
+    <div>
+      <h1 className="page-title">資料庫與 AI 智能管理中心</h1>
+
+      {/* 🚀 區塊 1: 系統訊息窗 (Console Log) */}
+      <div style={{ 
+        backgroundColor: sysLog.type === 'error' ? '#fdecea' : sysLog.type === 'success' ? '#e8f5e9' : '#e3f2fd',
+        borderLeft: `6px solid ${sysLog.type === 'error' ? '#f44336' : sysLog.type === 'success' ? '#4caf50' : '#2196f3'}`,
+        padding: '16px 20px', borderRadius: '12px', marginBottom: '24px', fontWeight: '700', fontSize: '0.95rem',
+        color: '#333', boxShadow: 'inset 0 0 10px rgba(0,0,0,0.02)', display: 'flex', alignItems: 'center', gap: '10px'
+      }}>
+        {sysLog.text}
+      </div>
+
+      {/* 🚀 區塊 2: AI 上傳與參數設定 */}
+      <div className="filter-bar">
+        <h2 style={{ fontSize: '1.2rem', color: '#d84315', fontWeight: '900', marginBottom: '15px' }}>
+          ✨ AI 班表圖片解析
+        </h2>
+        
+        <div className="flex-row" style={{ marginBottom: '15px' }}>
+          <select 
+            className="form-control" 
+            value={provider} 
+            onChange={(e) => setProvider(e.target.value)}
+            style={{ width: 'auto', fontWeight: 'bold', color: '#ff5722' }}
+          >
+            <option value="gemini">Google Gemini 引擎</option>
+            <option value="nvidia">Nvidia NIM 引擎</option>
+          </select>
+          <input 
+            type="text" 
+            className="form-control" 
+            value={modelName} 
+            onChange={(e) => setModelName(e.target.value)}
+            style={{ flex: 1, minWidth: '200px', backgroundColor: '#fff', fontFamily: 'monospace', color: '#555' }} 
+            placeholder="AI 辨識模型代碼"
+          />
+        </div>
+        <div className="flex-row">
+          <input 
+            type="file" 
+            accept="image/*"
+            className="form-control" 
+            onChange={(e) => setImageFile(e.target.files[0])}
+            style={{ flex: 1, background: '#fff' }} 
+          />
+          <button 
+            className="btn" 
+            onClick={handleParseImage} 
+            disabled={isUploading}
+            style={{ background: isUploading ? '#ccc' : 'var(--primary)', minWidth: '130px' }}
+          >
+            {isUploading ? '解析中...' : '🚀 開始解析'}
+          </button>
+        </div>
+      </div>
+
+      {/* 🚀 區塊 3: 暫存校對區 (當 AI 有結果時才會顯示) */}
+      {stagedData.length > 0 && (
+        <div style={{ background: '#fff9c4', padding: '20px', borderRadius: '16px', marginBottom: '30px', border: '2px dashed #fbc02d' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+            <h2 style={{ fontSize: '1.2rem', color: '#f57f17', fontWeight: '900' }}>
+              🔍 解析結果校對區 (尚未寫入)
+            </h2>
+            <button className="btn" onClick={confirmAndSaveStaged} style={{ background: '#4caf50' }}>
+              💾 確認無誤，寫入資料庫
+            </button>
+          </div>
+          <p style={{ fontSize: '0.85rem', color: '#795548', marginBottom: '10px', fontWeight: 'bold' }}>
+            系統提示：您可以直接點擊下方表格內的文字進行修改。若該筆資料錯誤，可點擊最右側移除。
+          </p>
+          <div style={{ overflowX: 'auto' }}>
+            <table className="data-table" style={{ background: '#fff' }}>
+              <thead>
                 <tr>
-                    <th>員工姓名</th>
-                    <th>星期一</th>
-                    <th>星期二</th>
-                    <th>星期三</th>
-                    <th>星期四</th>
-                    <th>星期五</th>
+                  <th>日期 (必填)</th><th>名稱 (必填)</th><th>班別</th><th>地點</th><th>時間</th><th>操作</th>
                 </tr>
-            </thead>
-            <tbody id="scheduleBody">
-                <!-- 預設為空，解析後由 JS 填入 -->
-            </tbody>
+              </thead>
+              <tbody>
+                {stagedData.map((item, index) => (
+                  <tr key={index}>
+                    <td><input type="date" className="form-control" value={item.date || ''} onChange={(e) => handleStagedChange(index, 'date', e.target.value)} style={{ padding: '6px', fontSize: '0.9rem' }}/></td>
+                    <td><input type="text" className="form-control" value={item.name || ''} onChange={(e) => handleStagedChange(index, 'name', e.target.value)} style={{ padding: '6px', fontSize: '0.9rem', width: '80px' }}/></td>
+                    <td><input type="text" className="form-control" value={item.shift || ''} onChange={(e) => handleStagedChange(index, 'shift', e.target.value)} style={{ padding: '6px', fontSize: '0.9rem', width: '80px' }}/></td>
+                    <td><input type="text" className="form-control" value={item.location || ''} onChange={(e) => handleStagedChange(index, 'location', e.target.value)} style={{ padding: '6px', fontSize: '0.9rem', width: '90px' }}/></td>
+                    <td><input type="text" className="form-control" value={item.time || ''} onChange={(e) => handleStagedChange(index, 'time', e.target.value)} style={{ padding: '6px', fontSize: '0.9rem', width: '100px' }}/></td>
+                    <td style={{ textAlign: 'center' }}>
+                      <button onClick={() => removeStagedRow(index)} className="btn-danger" style={{ padding: '6px 10px', borderRadius: '8px' }}>移除</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* 🚀 區塊 4: 手動新增與資料庫檢視 */}
+      <div className="flex-row" style={{ justifyContent: 'space-between', marginBottom: '15px', marginTop: '10px' }}>
+        <h2 style={{ fontSize: '1.2rem', color: '#333', fontWeight: '900', borderLeft: '4px solid #ff5722', paddingLeft: '10px' }}>正式資料庫管理</h2>
+        <button className="btn-danger" onClick={handleDeleteAll} style={{ borderRadius: '8px', fontWeight: 'bold' }}>
+          🗑️ 清除所有資料
+        </button>
+      </div>
+
+      <form onSubmit={handleManualAdd} className="flex-row filter-bar" style={{ background: '#fff', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
+        <input type="date" className="form-control" value={manual.date} onChange={e => setManual({...manual, date: e.target.value})} style={{ flex: 1, minWidth: '130px' }} required />
+        <input type="text" className="form-control" placeholder="名稱(必填)" value={manual.name} onChange={e => setManual({...manual, name: e.target.value})} style={{ flex: 1, minWidth: '90px' }} required />
+        <input type="text" className="form-control" placeholder="班別" value={manual.shift} onChange={e => setManual({...manual, shift: e.target.value})} style={{ flex: 1, minWidth: '80px' }} />
+        <input type="text" className="form-control" placeholder="地點" value={manual.location} onChange={e => setManual({...manual, location: e.target.value})} style={{ flex: 1, minWidth: '80px' }} />
+        <input type="text" className="form-control" placeholder="時間" value={manual.time} onChange={e => setManual({...manual, time: e.target.value})} style={{ flex: 1, minWidth: '100px' }} />
+        <button type="submit" className="btn" style={{ minWidth: '100px' }}>+ 手動新增</button>
+      </form>
+
+      <div style={{ overflowX: 'auto', marginTop: '20px' }}>
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>日期</th><th>名稱</th><th>班別</th><th>地點</th><th>時間</th><th style={{ textAlign: 'center' }}>操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            {shifts.length === 0 ? (
+              <tr><td colSpan="6" style={{ textAlign: 'center', color: '#999', padding: '30px' }}>目前資料庫無任何資料</td></tr>
+            ) : (
+              shifts.map((s) => (
+                <tr key={s.id}>
+                  <td style={{ color: '#777' }}>{s.date}</td>
+                  <td style={{ fontWeight: '900', color: '#ff5722' }}>{s.name}</td>
+                  <td>{s.shift}</td>
+                  <td>{s.location}</td>
+                  <td>{s.time}</td>
+                  <td style={{ textAlign: 'center' }}>
+                    <button onClick={() => handleDelete(s.id, s.name)} className="btn-danger" style={{ padding: '6px 14px', borderRadius: '8px' }}>刪除</button>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
         </table>
-        <br>
-        <button onclick="checkCompleteness()" style="background-color: #28a745;">檢查解析完整性</button>
+      </div>
     </div>
-
-    <!-- 4. 詳細訊息框 -->
-    <div class="section">
-        <h3>4. 編譯與解析詳細訊息框</h3>
-        <div id="logBox" class="log-box">系統已啟動，等待操作...<br></div>
-    </div>
-</div>
-
-<script>
-    // --- 日誌系統 ---
-    function logMessage(msg, isError = false) {
-        const logBox = document.getElementById('logBox');
-        const time = new Date().toLocaleTimeString();
-        const color = isError ? '#ff4d4d' : '#4af626';
-        logBox.innerHTML += `<span style="color: ${color}">[${time}] ${msg}</span><br>`;
-        logBox.scrollTop = logBox.scrollHeight;
-    }
-
-    // --- 1. 自動辨識代碼 ---
-    function autoRecognizeCode() {
-        const code = document.getElementById('modelCode').value.trim();
-        const badge = document.getElementById('codeTypeBadge');
-        if (!code) {
-            logMessage("代碼輸入區為空，無法辨識。", true);
-            badge.innerText = "";
-            return;
-        }
-        
-        // 簡單的正則表達式判斷格式
-        if (code.startsWith('{') || code.startsWith('[')) {
-            badge.innerText = "👉 辨識結果：JSON 格式";
-            logMessage("成功辨識代碼：JSON 配置檔");
-        } else if (code.includes('def ') || code.includes('import ')) {
-            badge.innerText = "👉 辨識結果：Python 代碼";
-            logMessage("成功辨識代碼：Python 腳本");
-        } else {
-            badge.innerText = "👉 辨識結果：一般純文本";
-            logMessage("成功辨識代碼：一般文本");
-        }
-    }
-
-    // --- 2. 模擬解析圖片 ---
-    function parseImage() {
-        const fileInput = document.getElementById('imageInput');
-        if (fileInput.files.length === 0) {
-            logMessage("【失敗】請先選擇班表圖片！", true);
-            return;
-        }
-
-        logMessage("開始上傳圖片...");
-        logMessage("編譯中... 呼叫 OCR 辨識模型...");
-        
-        // 模擬異步 API 呼叫延遲
-        setTimeout(() => {
-            // 模擬解析成功與失敗的機率
-            const isSuccess = Math.random() > 0.2; 
-            if (isSuccess) {
-                logMessage("【成功】圖片解析完成，已載入班表資料。");
-                renderMockData();
-            } else {
-                logMessage("【失敗】圖片模糊或模型超時，請重新解析！", true);
-                document.getElementById('scheduleBody').innerHTML = "";
-            }
-        }, 1500);
-    }
-
-    // 渲染模擬解析出來的數據（帶有故意留白供測試）
-    function renderMockData() {
-        const tbody = document.getElementById('scheduleBody');
-        tbody.innerHTML = "";
-        
-        const mockData = [
-            ["王小明", "早班", "晚班", "休假", "早班", "早班"],
-            ["李大華", "晚班", "", "晚班", "休假", "晚班"], // 故意留空
-            ["陳阿姨", "休假", "早班", "早班", "", "休假"]   // 故意留空
-        ];
-
-        mockData.forEach(row => {
-            let tr = document.createElement('tr');
-            row.forEach(cell => {
-                let td = document.createElement('td');
-                td.innerText = cell;
-                td.setAttribute('contenteditable', 'true'); // 允許手動直接編輯
-                // 當使用者修改時，移除錯誤標示
-                td.addEventListener('input', function() {
-                    this.classList.remove('error');
-                });
-                tr.appendChild(td);
-            });
-            tbody.appendChild(tr);
-        });
-    }
-
-    // --- 3. 檢查完整性 ---
-    function checkCompleteness() {
-        const tbody = document.getElementById('scheduleBody');
-        const cells = tbody.querySelectorAll('td');
-        
-        if (cells.length === 0) {
-            logMessage("【警告】目前沒有班表資料可檢查！", true);
-            return;
-        }
-
-        let hasError = false;
-        let missingCount = 0;
-
-        cells.forEach(cell => {
-            if (cell.innerText.trim() === "") {
-                cell.classList.add('error');
-                hasError = true;
-                missingCount++;
-            } else {
-                cell.classList.remove('error');
-            }
-        });
-
-        if (hasError) {
-            logMessage(`【檢查失敗】發現 ${missingCount} 個欄位未填寫或辨識遺漏，請手動點擊紅框修改！`, true);
-        } else {
-            logMessage("【檢查通過】班表完整性 100%，無遺漏欄位！");
-        }
-    }
-</script>
-</body>
-</html>
+  );
+}
