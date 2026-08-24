@@ -1,56 +1,12 @@
 import { NextResponse } from 'next/server';
-import { initializeApp, getApps } from 'firebase/app';
-import { getFirestore, doc, getDoc } from 'firebase/firestore';
 
 // ==============================================================================
-// 🔌 初始化 Firebase 讀取金鑰 (若尚未初始化)
-// ==============================================================================
-const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-};
-
-function getFirebaseDb() {
-  if (!firebaseConfig.projectId) return null;
-  const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
-  return getFirestore(app);
-}
-
-// 從 Firestore 讀取設定或金鑰
-async function fetchKeyFromFirebase(provider) {
-  try {
-    const db = getFirebaseDb();
-    if (!db) return null;
-
-    // 假設您的設定存在 settings/apikeys 或 settings/config 文件中
-    const docRef = doc(db, 'settings', 'config');
-    const docSnap = await getDoc(docRef);
-
-    if (docSnap.exists()) {
-      const data = docSnap.data();
-      if (provider === 'gemini') {
-        return data.geminiApiKey || data.GEMINI_API_KEY || null;
-      } else if (provider === 'nvidia') {
-        return data.nvidiaApiKey || data.NVIDIA_API_KEY || null;
-      }
-    }
-  } catch (err) {
-    console.warn('從 Firebase 讀取金鑰失敗，將改用環境變數:', err);
-  }
-  return null;
-}
-
-// ==============================================================================
-// 🧠 核心 SYSTEM PROMPT (矩陣對齊與防漏機制)
+// 🧠 核心 SYSTEM PROMPT (強制純 JSON 輸出)
 // ==============================================================================
 const SYSTEM_PROMPT = `
 你是一個極度精準且嚴謹的班表圖像 OCR 與結構化解析 AI 助手。
-請仔細辨識圖片中排班表矩陣，輸出嚴格的 JSON 格式。
-【重要規範】：請直接輸出純 JSON 物件，絕對不要加上任何 markdown 程式碼區塊標記（如 \`\`\`json 甚至是 \`\`\`），也不要在 JSON 前後夾雜任何說明文字。
+請仔細辨識圖片中排班表矩陣，並【絕對必須】只輸出合法的 JSON 物件。
+【最高禁令】：絕對禁止輸出任何 Markdown 語法（例如 \`\`\`json 或 \`\`\`），絕對禁止輸出任何開場白、解釋文字或結尾說明。只能輸出以 '{' 開頭、以 '}' 結尾的純文字 JSON！
 
 【絕對鐵律 - 矩陣強制對齊，徹底消滅錯位與漏抓】：
 1. **動態日期識別**：請精確讀取圖片頂部標題列的 7 個實際日期（例如 8月24日、8月25日...），存入 dates 陣列。必須剛好是 7 個日期。
@@ -66,7 +22,7 @@ const SYSTEM_PROMPT = `
 6. 【單字/雙字判讀】：如「休」，填入 "休"；如「指休」，填入 "指休"。
 7. 【多字含時間】：如「中洲/光春 1830~2230」，請完整提取字串。特別注意字型差異。
 
-強制輸出的 JSON 結構範例 (必須包含 dates 與 records 兩個 key，且不要有任何多餘文字)：
+強制輸出的 JSON 結構範例 (必須包含 dates 與 records 兩個 key)：
 {
   "dates": ["8月24日", "8月25日", "8月26日", "8月27日", "8月28日", "8月29日", "8月30日"],
   "records": [
@@ -87,23 +43,12 @@ export async function POST(req) {
       return NextResponse.json({ success: false, error: '未接收到圖片。' }, { status: 400 });
     }
 
-    const currentProvider = provider || 'gemini';
+    const geminiKey = process.env.GEMINI_API_KEY;
+    const nvidiaKey = process.env.NVIDIA_API_KEY;
 
-    // 優先從 Firebase 讀取金鑰，若無則讀取環境變數
-    let activeKey = await fetchKeyFromFirebase(currentProvider);
+    let activeKey = provider === 'gemini' ? geminiKey : nvidiaKey;
     if (!activeKey) {
-      if (currentProvider === 'gemini') {
-        activeKey = process.env.GEMINI_API_KEY;
-      } else if (currentProvider === 'nvidia') {
-        activeKey = process.env.NVIDIA_API_KEY;
-      }
-    }
-
-    if (!activeKey) {
-      return NextResponse.json({ 
-        success: false, 
-        error: `找不到 ${currentProvider.toUpperCase()} API 金鑰。請確認已寫入 Firebase 設定或 Vercel 環境變數中。` 
-      }, { status: 500 });
+      return NextResponse.json({ success: false, error: `伺服器未設定 ${provider ? provider.toUpperCase() : 'AI'} API 金鑰` }, { status: 500 });
     }
 
     let responseText = '';
@@ -111,7 +56,7 @@ export async function POST(req) {
     // ==========================================
     // 🚀 1. 支援 Gemini 官方 API (原生 Fetch)
     // ==========================================
-    if (currentProvider === 'gemini') {
+    if (provider === 'gemini') {
       const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
       const targetModel = modelName || 'gemini-1.5-pro';
       const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${activeKey}`;
@@ -141,7 +86,7 @@ export async function POST(req) {
     // ==========================================
     // 🚀 2. 支援 Nvidia NIM 視覺模型 API
     // ==========================================
-    else if (currentProvider === 'nvidia') {
+    else if (provider === 'nvidia') {
       const targetModel = modelName || 'nvidia/llama-3.2-90b-vision-instruct';
       const endpoint = 'https://integrate.api.nvidia.com/v1/chat/completions';
 
@@ -163,7 +108,7 @@ export async function POST(req) {
             }
           ],
           max_tokens: 4096,
-          temperature: 0.1
+          temperature: 0.0
         })
       });
 
@@ -182,31 +127,26 @@ export async function POST(req) {
     }
 
     // ==========================================
-    // 🛡️ 強固的 JSON 擷取與清洗機制
+    // 🛡️ 超強固的 JSON 智慧提取與清洗機制
     // ==========================================
     let parsedJson;
     try {
-      parsedJson = JSON.parse(responseText.trim());
-    } catch (e1) {
-      try {
-        const cleaned = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
-        parsedJson = JSON.parse(cleaned);
-      } catch (e2) {
-        const firstOpen = responseText.indexOf('{');
-        const lastClose = responseText.lastIndexOf('}');
-        if (firstOpen !== -1 && lastClose !== -1 && lastClose > firstOpen) {
-          const jsonSubstring = responseText.substring(firstOpen, lastClose + 1);
-          try {
-            parsedJson = JSON.parse(jsonSubstring);
-          } catch (e3) {
-            console.error('AI 原始回傳內容:', responseText);
-            throw new Error('無法從 AI 回傳內容中萃取有效 JSON');
-          }
-        } else {
-          console.error('AI 原始回傳內容:', responseText);
-          throw new Error('AI 回傳格式異常，找不到合法的 JSON 結構');
-        }
+      // 步驟 1：移除所有 Markdown 程式碼區塊標記
+      let cleaned = responseText.replace(/```json/gi, '').replace(/```/g, '').trim();
+
+      // 步驟 2：利用尋找第一組大括號 `{` 與最後一組 `}` 的方式，精準切出 JSON 內容體
+      const firstOpen = cleaned.indexOf('{');
+      const lastClose = cleaned.lastIndexOf('}');
+
+      if (firstOpen !== -1 && lastClose !== -1 && lastClose > firstOpen) {
+        const jsonSubstring = cleaned.substring(firstOpen, lastClose + 1);
+        parsedJson = JSON.parse(jsonSubstring);
+      } else {
+        throw new Error('找不到完整的 JSON 結構');
       }
+    } catch (e) {
+      console.error('AI 原始回傳內容發生解析錯誤:', responseText);
+      throw new Error(`AI 回傳格式無法解析：${e.message}`);
     }
 
     // ==========================================
