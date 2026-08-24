@@ -1,4 +1,48 @@
 import { NextResponse } from 'next/server';
+import { initializeApp, getApps } from 'firebase/app';
+import { getFirestore, doc, getDoc } from 'firebase/firestore';
+
+// ==============================================================================
+// 🔌 初始化 Firebase 讀取金鑰 (若尚未初始化)
+// ==============================================================================
+const firebaseConfig = {
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+};
+
+function getFirebaseDb() {
+  if (!firebaseConfig.projectId) return null;
+  const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+  return getFirestore(app);
+}
+
+// 從 Firestore 讀取設定或金鑰
+async function fetchKeyFromFirebase(provider) {
+  try {
+    const db = getFirebaseDb();
+    if (!db) return null;
+
+    // 假設您的設定存在 settings/apikeys 或 settings/config 文件中
+    const docRef = doc(db, 'settings', 'config');
+    const docSnap = await getDoc(docRef);
+
+    if (docSnap.exists()) {
+      const data = docSnap.data();
+      if (provider === 'gemini') {
+        return data.geminiApiKey || data.GEMINI_API_KEY || null;
+      } else if (provider === 'nvidia') {
+        return data.nvidiaApiKey || data.NVIDIA_API_KEY || null;
+      }
+    }
+  } catch (err) {
+    console.warn('從 Firebase 讀取金鑰失敗，將改用環境變數:', err);
+  }
+  return null;
+}
 
 // ==============================================================================
 // 🧠 核心 SYSTEM PROMPT (矩陣對齊與防漏機制)
@@ -43,12 +87,23 @@ export async function POST(req) {
       return NextResponse.json({ success: false, error: '未接收到圖片。' }, { status: 400 });
     }
 
-    const geminiKey = process.env.GEMINI_API_KEY;
-    const nvidiaKey = process.env.NVIDIA_API_KEY;
+    const currentProvider = provider || 'gemini';
 
-    let activeKey = provider === 'gemini' ? geminiKey : nvidiaKey;
+    // 優先從 Firebase 讀取金鑰，若無則讀取環境變數
+    let activeKey = await fetchKeyFromFirebase(currentProvider);
     if (!activeKey) {
-      return NextResponse.json({ success: false, error: `伺服器未設定 ${provider ? provider.toUpperCase() : 'AI'} API 金鑰` }, { status: 500 });
+      if (currentProvider === 'gemini') {
+        activeKey = process.env.GEMINI_API_KEY;
+      } else if (currentProvider === 'nvidia') {
+        activeKey = process.env.NVIDIA_API_KEY;
+      }
+    }
+
+    if (!activeKey) {
+      return NextResponse.json({ 
+        success: false, 
+        error: `找不到 ${currentProvider.toUpperCase()} API 金鑰。請確認已寫入 Firebase 設定或 Vercel 環境變數中。` 
+      }, { status: 500 });
     }
 
     let responseText = '';
@@ -56,7 +111,7 @@ export async function POST(req) {
     // ==========================================
     // 🚀 1. 支援 Gemini 官方 API (原生 Fetch)
     // ==========================================
-    if (provider === 'gemini') {
+    if (currentProvider === 'gemini') {
       const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
       const targetModel = modelName || 'gemini-1.5-pro';
       const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${activeKey}`;
@@ -86,7 +141,7 @@ export async function POST(req) {
     // ==========================================
     // 🚀 2. 支援 Nvidia NIM 視覺模型 API
     // ==========================================
-    else if (provider === 'nvidia') {
+    else if (currentProvider === 'nvidia') {
       const targetModel = modelName || 'nvidia/llama-3.2-90b-vision-instruct';
       const endpoint = 'https://integrate.api.nvidia.com/v1/chat/completions';
 
@@ -131,15 +186,12 @@ export async function POST(req) {
     // ==========================================
     let parsedJson;
     try {
-      // 1. 嘗試直接解析
       parsedJson = JSON.parse(responseText.trim());
     } catch (e1) {
       try {
-        // 2. 移除 markdown 區塊標記後再試
         const cleaned = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
         parsedJson = JSON.parse(cleaned);
       } catch (e2) {
-        // 3. 自動尋找第一個 '{' 與最後一個 '}' 之間的安全區段
         const firstOpen = responseText.indexOf('{');
         const lastClose = responseText.lastIndexOf('}');
         if (firstOpen !== -1 && lastClose !== -1 && lastClose > firstOpen) {
